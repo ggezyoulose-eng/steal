@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="screen-orientation" content="landscape">
+<title>STEAL A MEME 🐱</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+body{background:#0a0015;overflow:hidden;touch-action:none;user-select:none;font-family:'Segoe UI',system-ui,sans-serif;}
+canvas#c{display:block;position:fixed;inset:0;width:100%;height:100%;}
+
+/* ── HUD ── */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10;}
+
+#top-bar{
+  position:absolute;top:8px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:12px;
+  background:rgba(0,0,0,.75);border:2px solid #ff6b35;
+  border-radius:40px;padding:6px 20px;backdrop-filter:blur(10px);white-space:nowrap;
+}
+#game-title{color:#ff6b35;font-weight:900;font-size:.8rem;letter-spacing:2px;}
+#score-val{color:#ffcc02;font-weight:700;font-size:1.15rem;min-width:90px;text-align:center;}
+#income-rate{color:#00ff88;font-weight:600;font-size:.82rem;}
+
+#meme-count-hud{
+  position:absolute;top:8px;left:8px;
+  background:rgba(0,0,0,.75);border:2px solid #00ff88;
+  border-radius:10px;padding:5px 12px;
+  color:#00ff88;font-weight:700;font-size:.82rem;backdrop-filter:blur(8px);
+}
+
+/* Notifications stack */
+#notifs{
+  position:absolute;top:56px;right:8px;
+  display:flex;flex-direction:column;gap:5px;align-items:flex-end;
+  pointer-events:none;max-width:270px;
+}
+.notif{
+  background:rgba(0,0,0,.85);border-radius:10px;padding:6px 12px;
+  font-size:.8rem;font-weight:700;border-left:4px solid #fff;
+  animation:nIn .25s ease,nOut .35s 2.65s ease forwards;
+}
+@keyframes nIn{from{opacity:0;transform:translateX(25px)}to{opacity:1;transform:none}}
+@keyframes nOut{to{opacity:0;transform:translateX(25px)}}
+
+/* Big notice center */
+#big-notice{
+  position:absolute;top:46%;left:50%;transform:translate(-50%,-50%);
+  font-size:clamp(1.5rem,5vw,2.8rem);font-weight:900;
+  text-shadow:0 0 20px currentColor;opacity:0;
+  pointer-events:none;text-align:center;transition:opacity .2s;white-space:nowrap;
+}
+
+/* Interact prompt */
+#prompt{
+  position:absolute;bottom:clamp(160px,22vh,210px);left:50%;transform:translateX(-50%);
+  background:rgba(255,204,2,.2);border:2px solid #ffcc02;border-radius:10px;
+  padding:7px 20px;color:#ffcc02;font-weight:700;font-size:.9rem;
+  opacity:0;transition:opacity .2s;pointer-events:none;
+}
+
+/* Lock bar */
+#lock-bar-wrap{
+  position:absolute;bottom:clamp(145px,20vh,195px);left:50%;transform:translateX(-50%);
+  width:min(220px,50vw);text-align:center;
+}
+#lock-label{color:#ff6b35;font-size:.72rem;font-weight:700;margin-bottom:3px;}
+#lock-bar-bg{background:rgba(255,255,255,.12);border-radius:4px;height:7px;width:100%;}
+#lock-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#ff6b35,#ffcc02);transition:width .1s linear;}
+
+/* Carrying indicator */
+#carrying{
+  position:absolute;top:54px;left:50%;transform:translateX(-50%);
+  background:rgba(255,0,100,.2);border:2px solid #ff0066;border-radius:10px;
+  padding:5px 16px;color:#ff0066;font-weight:700;font-size:.85rem;
+  display:none;
+}
+
+/* ── MOBILE CONTROLS (Roblox-style) ── */
+#mobile-ui{
+  position:fixed;bottom:0;left:0;right:0;height:clamp(150px,22vh,200px);
+  display:flex;align-items:flex-end;justify-content:space-between;
+  padding:0 16px 14px;z-index:20;pointer-events:none;
+}
+
+/* Left joystick (move) */
+#joy-move-zone{
+  width:clamp(110px,16vw,130px);height:clamp(110px,16vw,130px);border-radius:50%;
+  background:rgba(255,255,255,.07);border:2px solid rgba(255,255,255,.2);
+  position:relative;pointer-events:all;touch-action:none;flex-shrink:0;
+}
+#joy-move-knob{
+  width:clamp(44px,7vw,54px);height:clamp(44px,7vw,54px);border-radius:50%;
+  background:rgba(255,107,53,.8);border:3px solid #ff6b35;
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  pointer-events:none;
+}
+
+/* Right joystick (camera) */
+#joy-cam-zone{
+  width:clamp(100px,14vw,120px);height:clamp(100px,14vw,120px);border-radius:50%;
+  background:rgba(255,255,255,.05);border:2px solid rgba(255,255,255,.15);
+  position:relative;pointer-events:all;touch-action:none;flex-shrink:0;
+}
+#joy-cam-knob{
+  width:clamp(38px,6vw,48px);height:clamp(38px,6vw,48px);border-radius:50%;
+  background:rgba(100,200,255,.5);border:2px solid #64c8ff;
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  pointer-events:none;
+}
+
+/* Action buttons (middle-right area) */
+#action-btns{
+  display:flex;flex-direction:column;gap:8px;pointer-events:all;align-items:center;
+  padding-bottom:4px;
+}
+.act-btn{
+  border:none;border-radius:50%;font-weight:700;cursor:pointer;
+  touch-action:none;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;line-height:1.2;transition:transform .1s,filter .1s;
+  font-size:.78rem;
+}
+.act-btn:active{transform:scale(.87);filter:brightness(1.5);}
+#btn-steal{
+  width:clamp(58px,9vw,70px);height:clamp(58px,9vw,70px);
+  background:rgba(255,204,2,.25);border:3px solid #ffcc02;color:#ffcc02;
+}
+#btn-jump{
+  width:clamp(48px,7vw,58px);height:clamp(48px,7vw,58px);
+  background:rgba(100,200,255,.2);border:2px solid #64c8ff;color:#64c8ff;
+}
+#btn-lock{
+  width:clamp(48px,7vw,58px);height:clamp(48px,7vw,58px);
+  background:rgba(255,100,50,.2);border:2px solid #ff6b35;color:#ff6b35;
+}
+
+#pc-hint{position:fixed;bottom:8px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.28);font-size:.65rem;pointer-events:none;z-index:5;}
+
+/* ── OVERLAYS ── */
+.overlay{
+  position:fixed;inset:0;background:rgba(5,0,20,.93);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  z-index:100;color:#fff;text-align:center;padding:20px;
+}
+.ov-title{font-size:clamp(2rem,7vw,3.2rem);font-weight:900;margin-bottom:.35em;}
+.ov-sub{color:#aaa;font-size:clamp(.82rem,2.8vw,1rem);margin-bottom:1.4em;line-height:1.8;}
+.ov-score{font-size:clamp(1.2rem,4vw,1.8rem);color:#ffcc02;font-weight:700;margin-bottom:1.4em;}
+.big-btn{
+  background:linear-gradient(135deg,#ff6b35,#ff2200);color:#fff;border:none;border-radius:16px;
+  padding:15px 52px;font-size:clamp(.95rem,3.5vw,1.15rem);font-weight:900;
+  cursor:pointer;box-shadow:0 0 28px #ff6b3544;transition:transform .18s;pointer-events:all;
+}
+.big-btn:hover,.big-btn:active{transform:scale(1.08);}
+.meme-row{font-size:2rem;margin-bottom:.5em;letter-spacing:5px;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div id="meme-count-hud">🎭 盗んだ: <span id="stolen-val">0</span></div>
+  <div id="top-bar">
+    <span id="game-title">STEAL A MEME</span>
+    <span id="score-val">¥0</span>
+    <span style="color:#444">|</span>
+    <span id="income-rate">+¥0/秒</span>
+  </div>
+  <div id="notifs"></div>
+  <div id="big-notice"></div>
+  <div id="prompt">⬆ [E/盗む] インタラクト</div>
+  <div id="carrying">🏃 運搬中！基地に戻れ！</div>
+  <div id="lock-bar-wrap">
+    <div id="lock-label">🔒 基地ロック</div>
+    <div id="lock-bar-bg"><div id="lock-bar-fill" style="width:100%"></div></div>
+  </div>
+</div>
+
+<div id="mobile-ui">
+  <div id="joy-move-zone"><div id="joy-move-knob"></div></div>
+  <div id="action-btns">
+    <button class="act-btn" id="btn-steal">🎭<br>盗む</button>
+    <button class="act-btn" id="btn-jump">↑<br>JMP</button>
+    <button class="act-btn" id="btn-lock">🔒<br>LOCK</button>
+  </div>
+  <div id="joy-cam-zone"><div id="joy-cam-knob"></div></div>
+</div>
+
+<div id="pc-hint">WASD移動 / マウスドラッグ視点 / E:インタラクト / Space:ジャンプ / L:ロック</div>
+
+
+
+<!-- END/PAUSE -->
+<div class="overlay" id="ov-end" style="display:none">
+  <div class="ov-title" id="end-title">ゲーム終了</div>
+  <div class="ov-sub" id="end-sub"></div>
+  <div class="ov-score" id="end-score"></div>
+  <button class="big-btn" id="btn-retry">🔄 もう一度</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════
+//  STEAL A MEME  —  Steal a Brainrot clone
+//  Three.js r128 | Single HTML | GitHub Pages ready
+// ═══════════════════════════════════════════════════════════
+
+/* ── Constants ─────────────────────────────────────────── */
+const WORLD         = 50;
+const BASE_LOCK_MAX = 30;   // seconds initial lock
+const BOT_NAMES     = ['XxMeme69xX','PepeLord🐸','skibidi_god','nyan_hacker','brainrot_777','sus_overlord','gigachad_99','trollface_pro','wojak_trader','doge_master','SIGMA_BOY','ratio_king'];
+const BOT_BASE_POSITIONS = [
+  [-20, -20], [20, -20], [-20, 20], [20, 20],
+  [0, -28],   [0, 28],  [-28, 0],  [28, 0],
+];
+
+/* ── Rarity tiers ─────────────────────────────────────── */
+const RARITY = [
+  {name:'COMMON',    col:0xaaaaaa, lc:'#aaa',    w:45, iMin:1,   iMax:5,    pMin:50,    pMax:300   },
+  {name:'UNCOMMON',  col:0x44cc44, lc:'#55ee55', w:28, iMin:5,   iMax:25,   pMin:300,   pMax:1500  },
+  {name:'RARE',      col:0x4488ff, lc:'#66aaff', w:14, iMin:25,  iMax:100,  pMin:1500,  pMax:8000  },
+  {name:'EPIC',      col:0xcc44ff, lc:'#dd77ff', w:7,  iMin:100, iMax:400,  pMin:8000,  pMax:35000 },
+  {name:'LEGENDARY', col:0xffaa00, lc:'#ffcc00', w:4,  iMin:400, iMax:1500, pMin:35000, pMax:150000},
+  {name:'MYTHIC',    col:0xff2266, lc:'#ff5599', w:2,  iMin:1500,iMax:6000, pMin:150000,pMax:600000},
+];
+
+/* ── 500 meme definitions ─────────────────────────────── */
+const EMOJIS = [
+  '🐸','🤡','🦆','👺','🐶','👾','💀','🦊','🐙','🎭','🧠','🤖','🐱','🐻','🦁',
+  '🐯','🐺','🦝','🦄','🐲','🦖','🦕','🐉','👻','💩','🤠','🥶','🥵','😈','👿',
+  '🤯','🥸','🤪','😵','🤑','🤫','🤭','🧐','😤','🥴','😜','🤗','😏','🙄','😬',
+  '😂','🤣','😭','😱','🤬','🤢','🤮','🥱','😴','🤓','👽','👹','🐔','🦅','🦉',
+  '🦇','🐝','🐛','🦋','🐌','🐞','🐜','🦗','🕷','🦂','🐢','🐍','🦎','🐊','🐋',
+  '🦈','🐬','🐟','🐡','🦑','🦞','🦀','🍕','🍔','🌮','🍜','🍣','🍦','🎂','🍩',
+  '🍪','🧁','🥐','🧀','🥚','🍳','🥞','🎮','🕹️','🎯','🎲','🃏','🎪','🎬','🎤',
+  '🎸','🥁','🎺','🎷','🎻','💎','👑','🏆','🥇','🔮','💫','⭐','🌟','✨','💥',
+  '🔥','🌈','⚡','🚀','🛸','🌍','🪐','🌙','☀️','🌊','🌋','❄️','🌪️','💧','⚗️',
+  '🦸','🦹','🧙','🧝','🧛','🧟','🧞','🧜','🧚','👮','🕵️','💂','👷','🤴','👸',
+  '🐭','🐹','🐰','🐼','🐨','🐷','🐸','🐵','🙈','🙉','🙊','🌵','🌴','🌲','🌳',
+  '🍀','🍁','🍂','🌸','🌺','🌻','🌹','🌷','🌾','🎋','🎃','🎄','🎆','🎇','🎊',
+  '🎉','🎈','🎀','🎁','🎗️','🧲','🔭','🔬','💡','🔦','💻','🖥️','📱','🎙️','📡',
+  '🔋','🧸','🪆','🪅','🎎','🎐','🧧','🎏','🎍','🎑','🪁','🎣','🤿','🎽','🦷',
+  '🦴','👀','👁️','👅','👃','🫀','🫁','🦾','🦿','💪','🦵','🦶','👂','🍎','🍊',
+  '🍋','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🫒','🌶️','🥕',
+  '🌽','🥦','🥬','🥒','🫑','🧄','🧅','🥔','🍺','🍻','🥂','🍷','🥃','🍸','🍹',
+  '☕','🍵','🧃','🥤','🧋','💰','💴','💵','💳','💹','📈','📊','🎓','📚','📖',
+  '✏️','📝','📌','📍','🗂️','📁','🗃️','🌡️','⚖️','🔧','🔨','⛏️','🔩','🔑','🗝️',
+  '🎠','🎡','🎢','🎥','📷','📸','📹','🎞️','📺','📻','🐉','🐲','🦕','🦜','🦩',
+];
+
+const MEME_POOL = [];
+for(let i=0;i<500;i++){
+  const emoji = EMOJIS[i % EMOJIS.length];
+  let roll=Math.random()*100, cum=0, rIdx=0;
+  for(let r=0;r<RARITY.length;r++){cum+=RARITY[r].w;if(roll<cum){rIdx=r;break;}}
+  const R=RARITY[rIdx];
+  MEME_POOL.push({
+    id:i, emoji, rIdx,
+    income: Math.round(R.iMin+Math.random()*(R.iMax-R.iMin)),
+    price:  Math.round(R.pMin+Math.random()*(R.pMax-R.pMin)),
+  });
+}
+function randMeme(){ return MEME_POOL[Math.floor(Math.random()*MEME_POOL.length)]; }
+function rareMeme(){ const pool=MEME_POOL.filter(m=>m.rIdx>=2); return pool[Math.floor(Math.random()*pool.length)]; }
+
+/* ── State ────────────────────────────────────────────── */
+let money=0, passiveIncome=0, stolenCount=0, gameRunning=false;
+let playerVelY=0, onGround=true;
+let carrying=null;          // meme def being carried
+let lockTimer=BASE_LOCK_MAX;
+let lockCooldown=0;
+let stealCooldown=0;
+
+// Camera angles
+let camYaw=0, camPitch=0.4;
+const CAM_DIST=12, CAM_H=5;
+
+const keys={};
+const moveJoy={x:0,y:0};
+const camJoy={x:0,y:0};
+let mouseDown=false, lastMX=0, lastMY=0;
+
+/* ── Renderer ─────────────────────────────────────────── */
+const cvs=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas:cvs,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.setClearColor(0x0a0015);
+const scene=new THREE.Scene();
+scene.fog=new THREE.FogExp2(0x0a0015,0.018);
+const camera=new THREE.PerspectiveCamera(65,1,0.1,150);
+
+function resize(){
+  renderer.setSize(innerWidth,innerHeight);
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize',resize); resize();
+
+/* ── Lights ───────────────────────────────────────────── */
+scene.add(new THREE.AmbientLight(0xffffff,0.55));
+const sun=new THREE.DirectionalLight(0xfff0e0,1.1);
+sun.position.set(15,30,10); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-60,right:60,top:60,bottom:-60,near:.5,far:120});
+scene.add(sun);
+// atmosphere point lights
+[[0,0,0x330066,15,0.4],[WORLD*.7,0,0x003366,12,0.3],[-WORLD*.7,0,0x660033,12,0.3]].forEach(([x,z,c,d,i])=>{
+  const pl=new THREE.PointLight(c,i,d); pl.position.set(x,2,z); scene.add(pl);
+});
+
+/* ── Helper ───────────────────────────────────────────── */
+function blk(w,h,d,col,emissive=null){
+  const m=new THREE.Mesh(
+    new THREE.BoxGeometry(w,h,d),
+    new THREE.MeshLambertMaterial({color:col,emissive:emissive?new THREE.Color(emissive):new THREE.Color(0)})
+  );
+  m.castShadow=m.receiveShadow=true; return m;
+}
+
+/* ── Ground / carpet ─────────────────────────────────── */
+function carpetCanvas(){
+  const cv=document.createElement('canvas'); cv.width=cv.height=512;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#120030'; ctx.fillRect(0,0,512,512);
+  // diagonal pattern
+  ctx.strokeStyle='rgba(120,0,255,.3)'; ctx.lineWidth=1.5;
+  for(let i=-512;i<1024;i+=20){
+    ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i+512,512); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i-512,512); ctx.stroke();
+  }
+  // gold border frames
+  ctx.strokeStyle='rgba(220,170,0,.2)'; ctx.lineWidth=2.5;
+  for(let b=10;b<256;b+=48){ ctx.strokeRect(b,b,512-b*2,512-b*2); }
+  return new THREE.CanvasTexture(cv);
+}
+const floorMat=new THREE.MeshLambertMaterial({map:carpetCanvas()});
+floorMat.map.wrapS=floorMat.map.wrapT=THREE.RepeatWrapping;
+floorMat.map.repeat.set(10,10);
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(WORLD*2,WORLD*2),floorMat);
+floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
+
+// outer walls
+for(const[x,z,w,d] of [[0,-WORLD,WORLD*2,.8],[0,WORLD,WORLD*2,.8],[-WORLD,0,.8,WORLD*2],[WORLD,0,.8,WORLD*2]]){
+  const b=blk(w,2.5,d,0x330055); b.position.set(x,1.25,z); scene.add(b);
+}
+// corner spires
+for(const[sx,sz] of [[-1,-1],[1,-1],[-1,1],[1,1]]){
+  const p=blk(1.5,5,1.5,0x660099); p.position.set(sx*(WORLD-.75),2.5,sz*(WORLD-.75)); scene.add(p);
+  const t=blk(2,.5,2,0xffcc00); t.position.set(sx*(WORLD-.75),5.25,sz*(WORLD-.75)); scene.add(t);
+}
+// neon floor edges
+for(const[x,z,w,d] of [[0,-WORLD+.25,WORLD*2,.15],[0,WORLD-.25,WORLD*2,.15],[-WORLD+.25,0,.15,WORLD*2],[WORLD-.25,0,.15,WORLD*2]]){
+  const n=new THREE.Mesh(new THREE.PlaneGeometry(w,d),new THREE.MeshBasicMaterial({color:0xaa00ff}));
+  n.rotation.x=-Math.PI/2; n.position.set(x,.01,z); scene.add(n);
+}
+
+/* ── Central Conveyor Belt ───────────────────────────── */
+const CONV_LEN=28, CONV_W=3.5, CONV_Y=0.05;
+// belt platform
+const convPlat=blk(CONV_LEN,0.4,CONV_W,0xcc0000);
+convPlat.position.set(0,.2,0); scene.add(convPlat);
+// belt surface (animated via scrolling texture)
+function beltCanvas(){
+  const cv=document.createElement('canvas'); cv.width=256; cv.height=64;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#880000'; ctx.fillRect(0,0,256,64);
+  ctx.fillStyle='#aa0000';
+  for(let x=0;x<256;x+=16){ ctx.fillRect(x,0,8,64); }
+  ctx.fillStyle='rgba(255,200,0,.5)';
+  for(let x=0;x<256;x+=32){ ctx.fillRect(x,28,16,8); }
+  return new THREE.CanvasTexture(cv);
+}
+const beltTex=beltCanvas();
+beltTex.wrapS=beltTex.wrapT=THREE.RepeatWrapping; beltTex.repeat.set(8,1);
+const beltSurf=new THREE.Mesh(new THREE.PlaneGeometry(CONV_LEN,CONV_W),new THREE.MeshBasicMaterial({map:beltTex}));
+beltSurf.rotation.x=-Math.PI/2; beltSurf.position.set(0,.41,0); scene.add(beltSurf);
+// conveyor side rails
+for(const sz of[-1,1]){
+  const r=blk(CONV_LEN,.3,.25,0xff2200); r.position.set(0,.55,sz*CONV_W*.5); scene.add(r);
+}
+// SHOP sign above conveyor
+function signCanvas(text,bg,fg){
+  const cv=document.createElement('canvas'); cv.width=256; cv.height=64;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle=bg; roundRect(ctx,2,2,252,60,10); ctx.fill();
+  ctx.font='bold 26px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle=fg; ctx.fillText(text,128,34);
+  return new THREE.CanvasTexture(cv);
+}
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
+const shopSign=new THREE.Sprite(new THREE.SpriteMaterial({map:signCanvas('🎭 コンベア SHOP','#cc0000','#ffffff'),transparent:true}));
+shopSign.scale.set(6,1.5,1); shopSign.position.set(0,3.5,0); scene.add(shopSign);
+
+/* conveyor meme items */
+const convMemes=[];
+function spawnConvMeme(){
+  const def=randMeme();
+  const R=RARITY[def.rIdx];
+  const g=new THREE.Group();
+  const cube=blk(.65,.65,.65,R.col); cube.material.emissive=new THREE.Color(R.col).multiplyScalar(.3); g.add(cube);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:emojiTex(def.emoji),transparent:true}));
+  sp.scale.set(.9,.9,1); sp.position.y=.55; g.add(sp);
+  // big price label
+  const lsp=new THREE.Sprite(new THREE.SpriteMaterial({map:bigLabelTex(def),transparent:true,depthWrite:false}));
+  lsp.scale.set(3.2,1.8,1); lsp.position.y=1.8; g.add(lsp);
+  g.position.set(-CONV_LEN*.5+Math.random()*CONV_LEN,.7,( Math.random()-.5)*CONV_W*.7);
+  g.userData={def,speed:.4+Math.random()*.4};
+  scene.add(g); convMemes.push(g);
+}
+for(let i=0;i<14;i++) spawnConvMeme();
+
+/* ── Emoji / Label texture cache ─────────────────────── */
+const emojiCache={};
+function emojiTex(emoji){
+  if(emojiCache[emoji]) return emojiCache[emoji];
+  const cv=document.createElement('canvas'); cv.width=cv.height=128;
+  const ctx=cv.getContext('2d');
+  ctx.font='80px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(emoji,64,68);
+  return (emojiCache[emoji]=new THREE.CanvasTexture(cv));
+}
+function bigLabelTex(def){
+  const R=RARITY[def.rIdx];
+  const cv=document.createElement('canvas'); cv.width=320; cv.height=100;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='rgba(0,0,0,.75)'; roundRect(ctx,0,0,320,100,12); ctx.fill();
+  ctx.textAlign='center';
+  ctx.font='bold 18px Segoe UI'; ctx.fillStyle=R.lc; ctx.fillText('★ '+R.name+' ★',160,22);
+  ctx.font='bold 22px Segoe UI'; ctx.fillStyle='#00ff88'; ctx.fillText('+¥'+def.income.toLocaleString()+'/秒',160,50);
+  ctx.font='bold 20px Segoe UI'; ctx.fillStyle='#ffcc02'; ctx.fillText('¥'+def.price.toLocaleString(),160,76);
+  return new THREE.CanvasTexture(cv);
+}
+function smallLabelTex(def){
+  const R=RARITY[def.rIdx];
+  const cv=document.createElement('canvas'); cv.width=320; cv.height=90;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='rgba(0,0,0,.7)'; roundRect(ctx,0,0,320,90,10); ctx.fill();
+  ctx.textAlign='center';
+  ctx.font='bold 16px Segoe UI'; ctx.fillStyle=R.lc; ctx.fillText('★ '+R.name,160,20);
+  ctx.font='bold 20px Segoe UI'; ctx.fillStyle='#00ff88'; ctx.fillText('+¥'+def.income.toLocaleString()+'/秒',160,46);
+  ctx.font='bold 18px Segoe UI'; ctx.fillStyle='#ffcc02'; ctx.fillText('¥'+def.price.toLocaleString(),160,70);
+  return new THREE.CanvasTexture(cv);
+}
+
+/* ── Player's base ───────────────────────────────────── */
+const PLAYER_BASE_POS=[0,-35];
+const playerBaseGroup=new THREE.Group();
+scene.add(playerBaseGroup);
+const playerBaseMemes=[];   // {mesh, def} stored here
+
+function buildBase(grp, col, name, isPlayer){
+  // floor
+  const fl=blk(12,.3,10,col); fl.position.set(0,.15,0); grp.add(fl);
+  // back wall
+  const bw=blk(12,4,.4,col); bw.position.set(0,2,-5); grp.add(bw);
+  // side walls
+  const sw1=blk(.4,4,10,col); sw1.position.set(-6,2,0); grp.add(sw1);
+  const sw2=blk(.4,4,10,col); sw2.position.set(6,2,0); grp.add(sw2);
+  // roof
+  const rf=blk(12,.3,10,col); rf.position.set(0,4.15,0); grp.add(rf);
+  // front opening (laser gate placeholder – shown separately)
+  // pillars
+  for(const sx of[-1,1]){
+    const p=blk(.6,4.3,.6,col); p.position.set(sx*5.7,2,5); grp.add(p);
+  }
+  // meme pedestals (10 slots: 2 rows of 5)
+  for(let row=0;row<2;row++) for(let col2=0;col2<5;col2++){
+    const ped=blk(1.4,.25,1.4,0x222222); ped.position.set(-4+col2*2,0.43,-3+row*3); grp.add(ped);
+  }
+  // name sign
+  if(name){
+    const ns=new THREE.Sprite(new THREE.SpriteMaterial({map:signCanvas(name,'rgba(0,0,0,.8)',isPlayer?'#ff6b35':'#ffffff'),transparent:true}));
+    ns.scale.set(5,1.2,1); ns.position.set(0,5.5,0); grp.add(ns);
+  }
+}
+buildBase(playerBaseGroup,0xff6633,'🏠 あなたの基地',true);
+playerBaseGroup.position.set(PLAYER_BASE_POS[0],.01,PLAYER_BASE_POS[1]);
+
+/* Laser gate (player base) */
+const laserMat=new THREE.MeshBasicMaterial({color:0xff0000,transparent:true,opacity:.7});
+const lasers=[];
+for(let i=0;i<5;i++){
+  const l=new THREE.Mesh(new THREE.BoxGeometry(.06,4,.06),laserMat);
+  l.position.set(-5+i*2.5,2,PLAYER_BASE_POS[1]+5); scene.add(l);
+  lasers.push(l);
+}
+let baseLocked=true;
+
+/* ── Bot bases ───────────────────────────────────────── */
+const botBases=[];
+const BOT_COLORS=[0x2255cc,0x22aa44,0xcc2222,0xcc8800,0x8822cc,0x0099aa,0xaa3300,0x006655];
+
+function spawnBotBase(idx){
+  if(idx>=BOT_BASE_POSITIONS.length) return;
+  const [bx,bz]=BOT_BASE_POSITIONS[idx];
+  const col=BOT_COLORS[idx%BOT_COLORS.length];
+  const name=BOT_NAMES[idx%BOT_NAMES.length];
+  const grp=new THREE.Group();
+  buildBase(grp,col,name,false);
+  grp.position.set(bx,.01,bz);
+  scene.add(grp);
+
+  // Place 3-8 random rare memes in base
+  const memeCount=3+Math.floor(Math.random()*6);
+  const memeMeshes=[];
+  for(let m=0;m<memeCount;m++){
+    const def=rareMeme();
+    const mg=makeMemeObj(def,true);
+    const row=Math.floor(m/5), col2=m%5;
+    mg.position.set(bx-4+col2*2,.7+.01,bz-3+row*3);
+    memeMeshes.push({mesh:mg,def,slot:m});
+  }
+
+  // bot "lock" timer
+  const locked=Math.random()<.5;
+  const lockT=locked?10+Math.random()*20:0;
+
+  // laser gate for bot base
+  const bLasers=[];
+  const bLaserMat=new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.75});
+  for(let i=0;i<5;i++){
+    const l=new THREE.Mesh(new THREE.BoxGeometry(.06,4,.06),bLaserMat);
+    l.position.set(bx-5+i*2.5,2,bz+5); scene.add(l); bLasers.push(l);
+  }
+
+  botBases.push({grp,name,col,bx,bz,memes:memeMeshes,locked,lockTimer:lockT,lasers:bLasers});
+  pushNotif('👤 '+name+' がゲームに参加しました！',['#ff6b35','#55ee55','#66aaff','#dd77ff'][idx%4]);
+}
+
+function makeMemeObj(def,inBase){
+  const R=RARITY[def.rIdx];
+  const g=new THREE.Group();
+  const cube=blk(.7,.7,.7,R.col); cube.material.emissive=new THREE.Color(R.col).multiplyScalar(.25); g.add(cube);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:emojiTex(def.emoji),transparent:true}));
+  sp.scale.set(.95,.95,1); sp.position.y=.55; g.add(sp);
+  if(!inBase){
+    const lsp=new THREE.Sprite(new THREE.SpriteMaterial({map:smallLabelTex(def),transparent:true,depthWrite:false}));
+    lsp.scale.set(3,1.5,1); lsp.position.y=1.8; g.add(lsp);
+  } else {
+    const lsp=new THREE.Sprite(new THREE.SpriteMaterial({map:bigLabelTex(def),transparent:true,depthWrite:false}));
+    lsp.scale.set(3.5,2,1); lsp.position.y=2.2; g.add(lsp);
+  }
+  scene.add(g); return g;
+}
+
+/* ── Player character ───────────────────────────────── */
+const player=new THREE.Group(); scene.add(player);
+const pbody=blk(.8,1,.55,0xff6b35); player.add(pbody);
+const phead=blk(.72,.72,.72,0xffcc99); phead.position.y=.86; player.add(phead);
+const pearL=blk(.22,.28,.1,0xff6b35); pearL.position.set(-.22,1.28,0); player.add(pearL);
+const pearR=blk(.22,.28,.1,0xff6b35); pearR.position.set(.22,1.28,0); player.add(pearR);
+[-.18,.18].forEach(sx=>{
+  const e=new THREE.Mesh(new THREE.SphereGeometry(.07,6,6),new THREE.MeshBasicMaterial({color:0x111111}));
+  e.position.set(sx,.9,.37); player.add(e);
+});
+const pnose=new THREE.Mesh(new THREE.SphereGeometry(.045,5,5),new THREE.MeshBasicMaterial({color:0xff99bb}));
+pnose.position.set(0,.78,.38); player.add(pnose);
+const plegL=blk(.3,.55,.3,0xff8c5a); plegL.position.set(-.22,-.78,0); player.add(plegL);
+const plegR=blk(.3,.55,.3,0xff8c5a); plegR.position.set(.22,-.78,0); player.add(plegR);
+const ptail=new THREE.Mesh(new THREE.TorusGeometry(.3,.065,6,8,Math.PI*1.1),new THREE.MeshLambertMaterial({color:0xff6b35}));
+ptail.position.set(.42,-.15,-.28); ptail.rotation.set(-.4,0,.5); player.add(ptail);
+
+// Carrying indicator on back
+const carrySlot=new THREE.Group(); carrySlot.position.set(0,.5,-.5); player.add(carrySlot);
+
+player.position.set(PLAYER_BASE_POS[0],.5,PLAYER_BASE_POS[1]-1);
+
+/* ── HUD helpers ────────────────────────────────────── */
+const scoreEl=document.getElementById('score-val');
+const incomeEl=document.getElementById('income-rate');
+const stolenEl=document.getElementById('stolen-val');
+const promptEl=document.getElementById('prompt');
+const carryEl=document.getElementById('carrying');
+const lockFill=document.getElementById('lock-bar-fill');
+const notifArea=document.getElementById('notifs');
+const bigNotice=document.getElementById('big-notice');
+
+function updateHUD(){
+  scoreEl.textContent='¥'+money.toLocaleString();
+  incomeEl.textContent='+¥'+passiveIncome+'/秒';
+  stolenEl.textContent=stolenCount;
+  const pct=Math.max(0,lockTimer/BASE_LOCK_MAX*100);
+  lockFill.style.width=pct+'%';
+  lockFill.style.background=lockTimer>0?'linear-gradient(90deg,#ff6b35,#ffcc02)':'linear-gradient(90deg,#555,#888)';
+  carryEl.style.display=carrying?'block':'none';
+}
+
+function pushNotif(msg,col='#ffffff'){
+  const d=document.createElement('div'); d.className='notif';
+  d.textContent=msg; d.style.borderColor=col; d.style.color=col;
+  notifArea.prepend(d); setTimeout(()=>d.remove(),3200);
+}
+
+let bigTO;
+function showBig(msg,col='#ff6b35'){
+  bigNotice.textContent=msg; bigNotice.style.color=col; bigNotice.style.opacity=1;
+  clearTimeout(bigTO); bigTO=setTimeout(()=>bigNotice.style.opacity=0,1500);
+}
+
+/* ── Input ──────────────────────────────────────────── */
+document.addEventListener('keydown',e=>keys[e.code]=true);
+document.addEventListener('keyup',  e=>keys[e.code]=false);
+
+// Mouse look (PC)
+cvs.addEventListener('mousedown',e=>{ mouseDown=true; lastMX=e.clientX; lastMY=e.clientY; });
+window.addEventListener('mouseup',()=>mouseDown=false);
+window.addEventListener('mousemove',e=>{
+  if(!mouseDown) return;
+  camYaw  -= (e.clientX-lastMX)*.004;
+  camPitch = Math.max(.1,Math.min(1.2,camPitch+(e.clientY-lastMY)*.003));
+  lastMX=e.clientX; lastMY=e.clientY;
+});
+cvs.addEventListener('contextmenu',e=>e.preventDefault());
+
+// Move Joystick
+const jmZ=document.getElementById('joy-move-zone');
+const jmK=document.getElementById('joy-move-knob');
+setupJoystick(jmZ,jmK,moveJoy,42);
+
+// Camera Joystick
+const jcZ=document.getElementById('joy-cam-zone');
+const jcK=document.getElementById('joy-cam-knob');
+setupJoystick(jcZ,jcK,camJoy,38);
+
+function setupJoystick(zone,knob,out,maxR){
+  let tid=null;
+  function upd(ex,ey){
+    const r=zone.getBoundingClientRect();
+    const ox=ex-(r.left+r.width/2), oy=ey-(r.top+r.height/2);
+    const len=Math.hypot(ox,oy), cl=Math.min(len,maxR);
+    const nx=len>0?ox/len*cl:0, ny=len>0?oy/len*cl:0;
+    knob.style.transform=`translate(calc(-50% + ${nx}px),calc(-50% + ${ny}px))`;
+    out.x=len>5?ox/len:0; out.y=len>5?oy/len:0;
+  }
+  zone.addEventListener('touchstart',e=>{e.preventDefault();tid=e.changedTouches[0].identifier;upd(e.changedTouches[0].clientX,e.changedTouches[0].clientY);},{passive:false});
+  zone.addEventListener('touchmove', e=>{e.preventDefault();for(const t of e.changedTouches) if(t.identifier===tid) upd(t.clientX,t.clientY);},{passive:false});
+  ['touchend','touchcancel'].forEach(ev=>zone.addEventListener(ev,e=>{e.preventDefault();tid=null;out.x=out.y=0;knob.style.transform='translate(-50%,-50%)';},{passive:false}));
+}
+
+// Action buttons
+function tapBtn(id,cb){
+  const el=document.getElementById(id); if(!el)return;
+  el.addEventListener('touchstart',e=>{e.preventDefault();cb(true);},{passive:false});
+  el.addEventListener('touchend',  e=>{e.preventDefault();cb(false);},{passive:false});
+  el.addEventListener('mousedown',()=>cb(true));
+  el.addEventListener('mouseup',  ()=>cb(false));
+}
+tapBtn('btn-steal',v=>{if(v)keys['KeyE']=true;});
+tapBtn('btn-jump', v=>keys['Space']=v);
+tapBtn('btn-lock', v=>{if(v)keys['KeyL']=true;});
+
+/* ── Game lifecycle ─────────────────────────────────── */
+document.getElementById('btn-retry').addEventListener('click',startGame);
+window.addEventListener('load', startGame);
+
+function startGame(){
+  money=100; passiveIncome=0; stolenCount=0; gameRunning=true;
+  carrying=null; lockTimer=BASE_LOCK_MAX; lockCooldown=0; stealCooldown=0;
+  // clear carry
+  while(carrySlot.children.length) carrySlot.remove(carrySlot.children[0]);
+
+  // Clear old bot bases
+  botBases.forEach(b=>{
+    scene.remove(b.grp);
+    b.memes.forEach(m=>scene.remove(m.mesh));
+    b.lasers.forEach(l=>scene.remove(l));
+  });
+  botBases.length=0;
+  playerBaseMemes.forEach(m=>{scene.remove(m.mesh);});
+  playerBaseMemes.length=0;
+
+  player.position.set(PLAYER_BASE_POS[0],.5,PLAYER_BASE_POS[1]-1);
+  camYaw=0; camPitch=.4;
+
+  // Spawn bots with stagger
+  const count=4+Math.floor(Math.random()*4);
+  for(let i=0;i<count;i++) setTimeout(()=>{ if(gameRunning) spawnBotBase(i); },i*2000+500);
+
+  document.getElementById('ov-start').style.display='none';
+  document.getElementById('ov-end').style.display='none';
+  updateHUD();
+}
+
+// Passive income tick
+setInterval(()=>{
+  if(!gameRunning) return;
+  money+=passiveIncome;
+  updateHUD();
+},1000);
+
+// Lock timer countdown
+setInterval(()=>{
+  if(!gameRunning) return;
+  if(lockTimer>0){
+    lockTimer=Math.max(0,lockTimer-1);
+    updateHUD();
+  }
+  // Bot lock timers
+  botBases.forEach(b=>{
+    if(b.locked && b.lockTimer>0){
+      b.lockTimer=Math.max(0,b.lockTimer-1);
+      if(b.lockTimer<=0) b.locked=false;
+    }
+  });
+},1000);
+
+/* ── Bounds check ───────────────────────────────────── */
+function inBase(px,pz,bx,bz,margin=6){
+  return Math.abs(px-bx)<margin && Math.abs(pz-bz)<margin*.85;
+}
+
+/* ── Main loop ──────────────────────────────────────── */
+const clock=new THREE.Clock();
+const tmpV=new THREE.Vector3();
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),.05);
+  if(stealCooldown>0) stealCooldown-=dt;
+
+  if(!gameRunning){ renderer.render(scene,camera); return; }
+
+  const t=Date.now()*.001;
+
+  // ── Conveyor belt scroll ──
+  beltTex.offset.x=t*.08;
+
+  // ── Conveyor memes move ──
+  for(let i=convMemes.length-1;i>=0;i--){
+    const m=convMemes[i];
+    m.position.x+=m.userData.speed*dt;
+    if(m.position.x>CONV_LEN*.5+2){
+      scene.remove(m); convMemes.splice(i,1);
+      setTimeout(()=>{ if(gameRunning) spawnConvMeme(); },1000);
+    }
+    m.rotation.y+=dt;
+  }
+
+  // ── Bot lock laser flash ──
+  botBases.forEach((b,bi)=>{
+    b.lasers.forEach(l=>{
+      l.visible=b.locked;
+      if(b.locked) l.material.opacity=.5+Math.sin(t*8+bi)*.3;
+    });
+  });
+  lasers.forEach(l=>{
+    l.visible=baseLocked;
+    if(baseLocked) l.material.opacity=.5+Math.sin(t*8)*.3;
+  });
+  baseLocked=(lockTimer>0);
+
+  // ── Camera joystick → rotate cam ──
+  camYaw  -= camJoy.x*dt*2.5;
+  camPitch = Math.max(.15,Math.min(1.1,camPitch+camJoy.y*dt*2));
+
+  // ── Player movement ──
+  let dx=moveJoy.x, dz=moveJoy.y;
+  if(Math.hypot(dx,dz)<.05){
+    dx=0; dz=0;
+    if(keys['KeyW']||keys['ArrowUp'])   dz=-1;
+    if(keys['KeyS']||keys['ArrowDown']) dz= 1;
+    if(keys['KeyA']||keys['ArrowLeft']) dx=-1;
+    if(keys['KeyD']||keys['ArrowRight'])dx= 1;
+  }
+  const speed = carrying ? 4.5 : 7;
+  if(dx!==0||dz!==0){
+    const len=Math.hypot(dx,dz); dx/=len; dz/=len;
+    // move relative to camera yaw
+    const fwd=new THREE.Vector3(-Math.sin(camYaw),0,-Math.cos(camYaw));
+    const right=new THREE.Vector3(Math.cos(camYaw),0,-Math.sin(camYaw));
+    const mv=fwd.multiplyScalar(-dz).add(right.multiplyScalar(dx)).normalize();
+    player.rotation.y=Math.atan2(mv.x,mv.z);
+    let nx=player.position.x+mv.x*speed*dt;
+    let nz=player.position.z+mv.z*speed*dt;
+    nx=Math.max(-WORLD+1,Math.min(WORLD-1,nx));
+    nz=Math.max(-WORLD+1,Math.min(WORLD-1,nz));
+    player.position.x=nx; player.position.z=nz;
+    plegL.rotation.x=Math.sin(t*9)*.65; plegR.rotation.x=Math.sin(t*9+Math.PI)*.65;
+  } else { plegL.rotation.x=0; plegR.rotation.x=0; }
+  ptail.rotation.z=Math.sin(t*3)*.4+.4;
+
+  // Jump
+  if(keys['Space']&&onGround){ playerVelY=7; onGround=false; }
+  playerVelY-=22*dt;
+  player.position.y+=playerVelY*dt;
+  if(player.position.y<=.5){ player.position.y=.5; playerVelY=0; onGround=true; }
+
+  // Lock key
+  if(keys['KeyL']||keys['KeyL']){
+    if(lockCooldown<=0 && lockTimer<=0){
+      lockTimer=BASE_LOCK_MAX; lockCooldown=3;
+      pushNotif('🔒 基地ロック！'+BASE_LOCK_MAX+'秒守られる','#ff6b35');
+      showBig('🔒 ロック！','#ff6b35');
+      updateHUD();
+    }
+    keys['KeyL']=false;
+  }
+  if(lockCooldown>0) lockCooldown-=dt;
+
+  // ── Interact detection ──
+  let promptShown=false;
+
+  // A) Conveyor memes → buy
+  for(const m of convMemes){
+    const dist=player.position.distanceTo(m.position);
+    if(dist<2.8){
+      const def=m.userData.def;
+      promptEl.textContent=`[E/盗む] ¥${def.price.toLocaleString()}で購入`;
+      promptEl.style.opacity='1'; promptShown=true;
+      if(keys['KeyE']&&stealCooldown<=0&&!carrying){
+        if(money>=def.price){
+          money-=def.price; passiveIncome+=def.income; stolenCount++;
+          keys['KeyE']=false; stealCooldown=.4;
+          showBig(def.emoji+' 購入！ +¥'+def.income+'/秒','#00ff88');
+          pushNotif('✅ '+def.emoji+' 購入 ('+RARITY[def.rIdx].name+') +¥'+def.income+'/秒','#00ff88');
+          // place in player base
+          placeMemeInPlayerBase(def);
+          scene.remove(m); convMemes.splice(convMemes.indexOf(m),1);
+          setTimeout(()=>{ if(gameRunning) spawnConvMeme(); },2000);
+          updateHUD();
+        } else {
+          showBig('¥'+def.price.toLocaleString()+' 足りない！','#ff2244');
+          keys['KeyE']=false;
+        }
+      }
+      break;
+    }
+  }
+
+  // B) Bot base memes → steal
+  if(!promptShown){
+    for(const b of botBases){
+      if(b.locked) continue;
+      for(let mi=b.memes.length-1;mi>=0;mi--){
+        const entry=b.memes[mi];
+        if(!entry.mesh.visible) continue;
+        const dist=player.position.distanceTo(entry.mesh.position);
+        if(dist<2.5){
+          promptEl.textContent='[E/盗む] 盗む！ ('+RARITY[entry.def.rIdx].name+')';
+          promptEl.style.opacity='1'; promptShown=true;
+          if(keys['KeyE']&&stealCooldown<=0&&!carrying){
+            // pick up
+            carrying=entry.def;
+            entry.mesh.visible=false;
+            b.memes.splice(mi,1);
+            keys['KeyE']=false; stealCooldown=.5;
+            b.locked=true; b.lockTimer=8;
+            // show on player back
+            while(carrySlot.children.length) carrySlot.remove(carrySlot.children[0]);
+            const cs=makeMemeCarry(entry.def);
+            carrySlot.add(cs);
+            showBig(entry.def.emoji+' 盗んだ！基地に運べ！','#ffcc02');
+            pushNotif('🏃 '+entry.def.emoji+' 盗んだ！早く基地へ！','#ffcc02');
+            updateHUD();
+          }
+          break;
+        }
+      }
+      if(promptShown) break;
+    }
+  }
+
+  // C) Player base → deposit stolen meme
+  if(!promptShown && carrying){
+    const dist2base=Math.hypot(player.position.x-PLAYER_BASE_POS[0], player.position.z-PLAYER_BASE_POS[1]);
+    if(dist2base<7){
+      promptEl.textContent='[E/盗む] 基地に置く！';
+      promptEl.style.opacity='1'; promptShown=true;
+      if(keys['KeyE']&&stealCooldown<=0){
+        placeMemeInPlayerBase(carrying);
+        passiveIncome+=carrying.income; stolenCount++;
+        showBig(carrying.emoji+' 基地に置いた！ +¥'+carrying.income+'/秒','#00ff88');
+        pushNotif('✅ '+carrying.emoji+' 盗み成功！+¥'+carrying.income+'/秒','#ff6b35');
+        carrying=null;
+        while(carrySlot.children.length) carrySlot.remove(carrySlot.children[0]);
+        keys['KeyE']=false; stealCooldown=.5;
+        updateHUD();
+      }
+    }
+  }
+
+  if(!promptShown) promptEl.style.opacity='0';
+
+  // ── Place meme in player base visual ──
+  function placeMemeInPlayerBase(def){
+    const slot=playerBaseMemes.length;
+    const row=Math.floor(slot/5), col2=slot%5;
+    if(row>1) return; // max 10
+    const mg=makeMemeObj(def,true);
+    mg.position.set(PLAYER_BASE_POS[0]-4+col2*2,.7,PLAYER_BASE_POS[1]-3+row*3);
+    playerBaseMemes.push({mesh:mg,def});
+  }
+
+  // ── Camera position ──
+  const cx=Math.sin(camYaw)*CAM_DIST*Math.cos(camPitch);
+  const cy=Math.sin(camPitch)*CAM_DIST;
+  const cz=Math.cos(camYaw)*CAM_DIST*Math.cos(camPitch);
+  camera.position.set(player.position.x+cx,player.position.y+cy,player.position.z+cz);
+  camera.lookAt(player.position.x,player.position.y+1.5,player.position.z);
+
+  renderer.render(scene,camera);
+}
+
+function makeMemeCarry(def){
+  const R=RARITY[def.rIdx];
+  const g=new THREE.Group();
+  const cube=blk(.5,.5,.5,R.col); g.add(cube);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:emojiTex(def.emoji),transparent:true}));
+  sp.scale.set(.7,.7,1); sp.position.y=.4; g.add(sp);
+  return g;
+}
+
+animate();
+</script>
+</body>
+</html>
